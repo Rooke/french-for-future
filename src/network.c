@@ -1,8 +1,16 @@
+//
+//  network.c
+//  French for Future
+//
+//  Created by Julian Lepinski on 2014-02-12
+//  Based on Futura Weather by Niknam (https://github.com/Niknam/futura-weather-sdk2.0)
+//
+
 #include <pebble.h>
 #include "network.h"
 
 static void appmsg_in_received(DictionaryIterator *received, void *context) {
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "In received.");
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "appmsg_in_received.");
 
   UpdateData *update_data = (UpdateData*) context;
 
@@ -10,24 +18,37 @@ static void appmsg_in_received(DictionaryIterator *received, void *context) {
   Tuple *btc_tuple = dict_find(received, KEY_BTC);
   Tuple *condition_tuple = dict_find(received, KEY_CONDITION);
   Tuple *error_tuple = dict_find(received, KEY_ERROR);
+  Tuple *colourscheme_tuple = dict_find(received, KEY_COLOURSCHEME);
+  Tuple *bitcoin_tuple = dict_find(received, KEY_BITCOIN);
 
   if (temperature_tuple && condition_tuple) {
     update_data->temperature = temperature_tuple->value->int32;
-    update_data->btc = btc_tuple->value->int32;
     update_data->condition = condition_tuple->value->int32;
-    update_data->error = UPDATE_E_OK;
+    update_data->error = WEATHER_E_OK;
     update_data->updated = time(NULL);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Got temperature %i and condition %i", update_data->temperature, update_data->condition);
-  }
-  else if (error_tuple) {
-    update_data->error = UPDATE_E_NETWORK;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Got temperature %i and condition %i", weather->temperature, weather->condition);
+  } else if (bitcoin_tuple){
+    update_data->bitcoin = bitcoin_tuple->value->int32;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Got bitcoin %i", weather->bitcoin);
+  } else if (error_tuple) {
+    update_data->error = WEATHER_E_NETWORK;
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Got error %s", error_tuple->value->cstring);
-  }
-  else {
-    update_data->error = UPDATE_E_PHONE;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Got message with unknown keys... "
-                                 "temperature=%p btc=%p condition=%p error=%p",
-            temperature_tuple, btc_tuple, condition_tuple, error_tuple);
+  } else if (colourscheme_tuple){
+    const char *colourScheme = colourscheme_tuple->value->cstring;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Got colour scheme %s", colourscheme_tuple->value->cstring);
+    if (strcmp(colourScheme, "light") == 0) {
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "parsed that as light");
+      cbf(false);
+    } else if (strcmp(colourScheme, "dark") == 0) {
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "parsed that as dark");
+      cbf(true);
+    } else {
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "failed to parse the colour scheme");
+    }
+  } else {
+    update_data->error = WEATHER_E_PHONE;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Got message with unknown keys... temperature=%p condition=%p error=%p",
+      temperature_tuple, condition_tuple, error_tuple);
   }
 }
 
@@ -63,8 +84,8 @@ static void appmsg_out_failed(DictionaryIterator *failed, AppMessageResult reaso
   }
 }
 
-void init_network(UpdateData *update_data)
-{
+void init_network(UpdateData *update_data, void (*callbackFunction)(bool)) {
+  cbf = callbackFunction;
   app_message_register_inbox_received(appmsg_in_received);
   app_message_register_inbox_dropped(appmsg_in_dropped);
   app_message_register_outbox_sent(appmsg_out_sent);
@@ -77,8 +98,7 @@ void init_network(UpdateData *update_data)
 
 }
 
-void close_network()
-{
+void close_network() {
   app_message_deregister_callbacks();
 }
 

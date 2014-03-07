@@ -1,11 +1,29 @@
+//
+//  pebble-js-app.js
+//  French for Future
+//
+//  Created by Julian Lepinski on 2014-02-12
+//  Based on Futura Weather by Niknam (https://github.com/Niknam/futura-weather-sdk2.0)
+//
+
+var temperatureOverride = false;
+var temperatureInC = true;
+
 Pebble.addEventListener("ready", function(e) {
     console.log("Starting ...");
     updateWeather();
+    updateBitcoin();
 });
 
 Pebble.addEventListener("appmessage", function(e) {
+<<<<<<< HEAD
     console.log("Got a message - Starting update request...");
     update();
+=======
+    console.log("Got a message - Starting weather request...");
+    updateWeather();
+    updateBitcoin();
+>>>>>>> julian/rooke-you-owe-me
 });
 
 var updateInProgress = false;
@@ -33,25 +51,42 @@ function locationError(err) {
     updateInProgress = false;
 }
 
-function fetchWeather(latitude, longitude) {
+function updateBitcoin(){
+    console.log("updateBitcoin: updating bitcoin price...");
     var response;
-    var btc_price = 0.0;
     var req = new XMLHttpRequest();
-
+    console.log("updateBitcoin: making request");
     req.open('GET', "https://cavirtex.com/api/CAD/ticker.json", true);
     req.onload = function(e) {
+        console.log("updateBitcoin: onload");
         if (req.readyState == 4) {
             if(req.status == 200) {
                 console.log(req.responseText);
                 response = JSON.parse(req.responseText);
+                var btc_price;
                 if (response) {
-                    btc_price = response.last*100;
+                    btc_price = response.last;
+                    console.log("Bitcoin: " + btc_price);
+
+                    Pebble.sendAppMessage({
+                        "bitcoin": btc_price
+                    });
+                    updateInProgress = false;
                 }
+            } else {
+                console.log("updateBitcoin: Error");
+                updateInProgress = false;
+                Pebble.sendAppMessage({ "error": "HTTP Error" });
             }
         }
-    }
+    };
+    req.send(null);
+}
 
-    req = new XMLHttpRequest();
+function fetchWeather(latitude, longitude) {
+    var response;
+    var req = new XMLHttpRequest();
+
     req.open('GET', "http://api.openweathermap.org/data/2.5/weather?" +
         "lat=" + latitude + "&lon=" + longitude + "&cnt=1", true);
     req.onload = function(e) {
@@ -63,13 +98,20 @@ function fetchWeather(latitude, longitude) {
                 var current_time = Date.now() / 1000;
                 if (response) {
                     var tempResult = response.main.temp;
-                    if (response.sys.country === "US") {
-                        // Convert temperature to Fahrenheit if user is within the US
-                        temperature = Math.round(((tempResult - 273.15) * 1.8) + 32);
-                    }
-                    else {
-                        // Otherwise, convert temperature to Celsius
-                        temperature = Math.round(tempResult - 273.15);
+                    if (!temperatureOverride){
+                        if (response.sys.country === "US") {
+                            // Convert temperature to Fahrenheit if user is within the US
+                            temperature = Math.round(((tempResult - 273.15) * 1.8) + 32);
+                        } else {
+                            // Otherwise, convert temperature to Celsius
+                            temperature = Math.round(tempResult - 273.15);
+                        }
+                    } else {
+                        if (!temperatureInC) {
+                            temperature = Math.round(((tempResult - 273.15) * 1.8) + 32);
+                        } else {
+                            temperature = Math.round(tempResult - 273.15);
+                        }
                     }		 
                     condition = response.weather[0].id;
                     sunrise = response.sys.sunrise;
@@ -77,11 +119,10 @@ function fetchWeather(latitude, longitude) {
 
                     console.log("Temperature: " + temperature + " Condition: " + condition + " Sunrise: " + sunrise +
                               " Sunset: " + sunset + " Now: " + Date.now() / 1000);
-                              
+
                     Pebble.sendAppMessage({
                         "condition": condition,
                         "temperature": temperature,
-                        "btc_price": btc_price,
                         "sunrise": sunrise,
                         "sunset": sunset,
                         "current_time": current_time
@@ -97,3 +138,38 @@ function fetchWeather(latitude, longitude) {
     };
     req.send(null);
 }
+
+Pebble.addEventListener("showConfiguration", function(e) {
+    console.log("Showing configuration");
+    Pebble.openURL('http://debaclesoftware.com/fff/index.html');
+});
+
+Pebble.addEventListener("webviewclosed", function(e) {
+    console.log("Closing webview");
+    var JSP = JSON.parse(e.response);
+    var cs = JSP["colourScheme"];
+
+    console.log(cs);
+    Pebble.sendAppMessage({
+    	"colourscheme" : cs
+    });
+/*
+    //store the settings
+    if (e.response) {
+        var config = JSON.parse(e.response);
+        console.log("Configuration window returned: " + JSON.stringify(config));
+
+        //set the params and log them
+        console.log("Stop Numbers: " + config.stop_num);
+        console.log("Route Numbers: " + config.route_num);
+
+        //store the lists and trigger a reload
+        localStorage.setItem("route_list", config.route_num);
+        localStorage.setItem("stop_num_list", config.stop_num);
+        stop_num_list = config.stop_num;
+        reload();
+    } else {
+        console.log("no response");
+    }
+*/
+});
